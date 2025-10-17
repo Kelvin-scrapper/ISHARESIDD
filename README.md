@@ -59,8 +59,13 @@ Implements **DUAL DATE LOGIC**:
 - If found: Compares and **corrects/updates** any changes
 - Ensures historical data accuracy
 
-#### **STEP 2: Yesterday's Date Mapping**
-- Always maps to **YESTERDAY'S DATE** (today - 1 day)
+#### **STEP 2: Last Business Date Mapping (Skips Weekends)**
+- Maps to **LAST BUSINESS DATE** (automatically skips weekends)
+  * **Monday** → Maps to Friday (last business day)
+  * **Tuesday** → Maps to Monday (yesterday)
+  * **Wednesday-Friday** → Maps to previous day
+  * **Saturday** → Maps to Friday (last business day)
+  * **Sunday** → Maps to Friday (last business day)
 - Creates new row if doesn't exist
 - Updates existing row if present
 - **Zero value handling**: Uses previous day's data for 0/invalid values
@@ -73,9 +78,10 @@ Implements **DUAL DATE LOGIC**:
 - **Change detection** - Automatically detects and corrects data changes
 - **Dual mapping** - Historical correction + current tracking
 
-### ✅ Smart Date Logic
+### ✅ Smart Date Logic with Weekend Handling
 - Uses "As of Date" from source to correct historical data
-- Maps to yesterday's date for current tracking
+- Maps to **last business date** for current tracking (skips weekends)
+- **Monday runs** create Friday's data (not Sunday's)
 - Handles stale/outdated source data gracefully
 
 ### ✅ Data Validation
@@ -136,21 +142,28 @@ pip install -r requirements.txt
 
 ## 🔄 Workflow Example
 
-**Day 1 (Oct 17):**
+**Friday (Oct 17) - Normal Day:**
 ```
 Source: As of Date = Oct 15
 Output:
-  Row 3: Oct 15 (historical, corrected if needed)
-  Row 4: Oct 16 (yesterday's data)
+  Row: Oct 15 (historical, corrected if needed)
+  Row: Oct 16 (last business day = Thursday)
 ```
 
-**Day 2 (Oct 18):**
+**Monday (Oct 20) - After Weekend:**
 ```
 Source: As of Date = Oct 16
 Output:
-  Row 3: Oct 15 (unchanged)
-  Row 4: Oct 16 (historical, corrected if needed)
-  Row 5: Oct 17 (yesterday's new data)
+  Row: Oct 16 (historical, corrected if needed)
+  Row: Oct 17 (last business day = Friday, skips weekend)
+```
+
+**Tuesday (Oct 21) - Normal Day:**
+```
+Source: As of Date = Oct 17
+Output:
+  Row: Oct 17 (historical, corrected if needed)
+  Row: Oct 20 (last business day = Monday)
 ```
 
 ## 🛠️ Error Handling
@@ -162,10 +175,12 @@ Output:
 
 ## 📌 Notes
 
-- The code always uses **yesterday's date** for current tracking
+- The code uses **last business date** for current tracking (skips weekends)
+- **Monday runs** map to Friday (not Sunday) - this is by design
 - Historical data is automatically reviewed and corrected on each run
 - Zero or invalid values are handled by using previous day's data
 - All headers are hardcoded for independence and reliability
+- Designed for **daily execution** (including weekends if needed)
 
 ## 🎓 Maintenance
 

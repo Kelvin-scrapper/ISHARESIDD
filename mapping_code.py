@@ -2,7 +2,12 @@
 Robust Mapping Script - ETF Effective Duration Data
 - DUAL MAPPING LOGIC:
   1. First checks and updates/corrects HISTORICAL data (from "As of Date" in source)
-  2. Then maps to YESTERDAY'S date for current tracking
+  2. Then maps to LAST BUSINESS DATE (skips weekends)
+- WEEKEND HANDLING:
+  * Monday -> Maps to Friday (skips weekend)
+  * Saturday -> Maps to Friday
+  * Sunday -> Maps to Friday
+  * Tuesday-Friday -> Maps to previous day
 - Handles 0 values by using previous day's data
 - Reviews and corrects historical data if changes detected
 - Validates data before writing
@@ -256,24 +261,49 @@ def write_data_to_row(ws, row_num, date_str, column_mapping, label=""):
     for col_idx, data in column_mapping.items():
         ws.cell(row=row_num, column=col_idx, value=data['duration'])
 
+def get_last_business_date():
+    """
+    Calculate the last business date (skips weekends)
+    - If today is Monday (0), return Friday (3 days ago)
+    - If today is Sunday (6), return Friday (2 days ago)
+    - If today is Saturday (5), return Friday (1 day ago)
+    - Otherwise, return yesterday
+    """
+    today = datetime.now()
+    weekday = today.weekday()  # Monday=0, Sunday=6
+
+    if weekday == 0:  # Monday
+        last_business_date = today - timedelta(days=3)  # Friday
+        print(f"[INFO] Today is Monday - mapping to Friday (last business day)")
+    elif weekday == 6:  # Sunday
+        last_business_date = today - timedelta(days=2)  # Friday
+        print(f"[INFO] Today is Sunday - mapping to Friday (last business day)")
+    elif weekday == 5:  # Saturday
+        last_business_date = today - timedelta(days=1)  # Friday
+        print(f"[INFO] Today is Saturday - mapping to Friday (last business day)")
+    else:  # Tuesday-Friday
+        last_business_date = today - timedelta(days=1)  # Yesterday
+
+    return last_business_date
+
 def create_mapping():
     """
     DUAL MAPPING LOGIC:
     1. Check and update HISTORICAL data (from "As of Date")
-    2. Map to YESTERDAY'S date for current tracking
+    2. Map to LAST BUSINESS DATE (skips weekends)
     """
     output_filename = 'ISHARESIDD_DATA_.xlsx'
 
-    # Calculate YESTERDAY'S date
+    # Calculate LAST BUSINESS DATE (skip weekends)
     today = datetime.now()
-    yesterday = today - timedelta(days=1)
-    yesterday_str = yesterday.strftime("%Y-%m-%d")
+    last_business_date = get_last_business_date()
+    target_date_str = last_business_date.strftime("%Y-%m-%d")
 
     print("=" * 80)
-    print("ROBUST ETF DATA MAPPING - DUAL DATE LOGIC")
+    print("ROBUST ETF DATA MAPPING - DUAL DATE LOGIC (BUSINESS DAYS)")
     print("=" * 80)
-    print(f"Today's Date: {today.strftime('%Y-%m-%d')}")
-    print(f"Yesterday's Date: {yesterday_str}")
+    print(f"Today's Date: {today.strftime('%Y-%m-%d')} ({today.strftime('%A')})")
+    print(f"Target Date: {target_date_str} ({last_business_date.strftime('%A')})")
     print("=" * 80)
 
     # Get "As of Date" from source file
@@ -334,21 +364,21 @@ def create_mapping():
         print(f"  [INFO] Will only map to yesterday's date")
 
     # =============================================================================
-    # STEP 2: MAP TO YESTERDAY'S DATE
+    # STEP 2: MAP TO LAST BUSINESS DATE
     # =============================================================================
     print("\n" + "=" * 80)
-    print("STEP 2: MAPPING TO YESTERDAY'S DATE")
+    print("STEP 2: MAPPING TO LAST BUSINESS DATE")
     print("=" * 80)
-    print(f"Checking for yesterday's date: {yesterday_str}")
+    print(f"Checking for target date: {target_date_str}")
 
-    existing_row = find_row_by_date(target_ws, yesterday_str)
+    existing_row = find_row_by_date(target_ws, target_date_str)
 
     if existing_row:
-        print(f"  Found existing row {existing_row} with yesterday's date - will UPDATE")
+        print(f"  Found existing row {existing_row} with target date - will UPDATE")
         target_row = existing_row
         is_update = True
     else:
-        print("  No existing data for yesterday's date - will CREATE NEW ROW")
+        print("  No existing data for target date - will CREATE NEW ROW")
         # Find next empty row
         target_row = 3
         while target_ws.cell(row=target_row, column=1).value is not None:
@@ -360,9 +390,9 @@ def create_mapping():
     previous_data = get_previous_row_data(target_ws, target_row)
 
     # Create column mapping
-    print("  Creating column mapping for yesterday's data...")
+    print("  Creating column mapping for target date...")
     column_mapping, zero_value_count = create_column_mapping(
-        source_data, previous_data, "yesterday"
+        source_data, previous_data, "business_date"
     )
 
     if zero_value_count > 0:
@@ -380,8 +410,8 @@ def create_mapping():
     else:
         print(f"  [ACTION] Writing new data to row {target_row}...")
 
-    # Write data to yesterday's row
-    write_data_to_row(target_ws, target_row, yesterday_str, column_mapping)
+    # Write data to target date row
+    write_data_to_row(target_ws, target_row, target_date_str, column_mapping)
 
     # Display what was written
     print("\n  Data written:")
@@ -400,7 +430,7 @@ def create_mapping():
     print("=" * 80)
     if historical_row:
         print(f"Historical data: {'CORRECTED' if hist_changes else 'VERIFIED'} for {as_of_date_str} (row {historical_row})")
-    print(f"Yesterday's data: {'UPDATED' if is_update else 'CREATED'} for {yesterday_str} (row {target_row})")
+    print(f"Business date: {'UPDATED' if is_update else 'CREATED'} for {target_date_str} (row {target_row})")
     print(f"Total ETFs mapped: {len(column_mapping)}")
     print(f"Zero/Invalid values handled: {zero_value_count}")
     print(f"Output file: {output_filename}")
